@@ -4,7 +4,7 @@ A unique and interactive password generator built with Next.js and React. This w
 
 ## 🌐 Live Demo
 
-You can try out the Rotating Password Generator here: 
+You can try out the Rotating Password Generator here: [Password Generator](https://quinta0.github.io/password-generator/)
 
 ## ✨ Features
 
@@ -19,7 +19,7 @@ You can try out the Rotating Password Generator here:
 
 ## 🚀 How to Use
 
-1. Visit the [live demo]
+1. Visit the [live demo](https://quinta0.github.io/password-generator/)
 2. Customize your password settings using the settings menu
 3. Select character slots on each ring
 4. Click "Generate Password" to create your password
