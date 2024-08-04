@@ -140,7 +140,7 @@ const PasswordGenerator = () => {
         const containerSize = 600;
         const centerX = containerSize / 2;
         const centerY = containerSize / 2;
-        const maxRadius = (containerSize / 2) - 10;
+        const maxRadius = (containerSize / 2) - 20;
         const ringSpacing = maxRadius / totalRings;
         const radius = maxRadius - (ringIndex * ringSpacing);
 
@@ -149,18 +149,33 @@ const PasswordGenerator = () => {
             const radians = angle * (Math.PI / 180);
             const x = Math.cos(radians) * radius + centerX;
             const y = Math.sin(radians) * radius + centerY;
+
+            // Define colors for each ring
+            const ringColors = [
+                'text-blue-400',
+                'text-green-400',
+                'text-yellow-400',
+                'text-purple-400',
+                'text-pink-400',
+                'text-red-400'
+            ];
+
             return (
                 <button
                     key={i}
-                    className={`absolute text-base font-bold 
-                    ${i % 6 === 0 ? 'text-blue-600 text-xl' : 'text-gray-600'}
-                    ${selectedSlots[ringIndex][i] ? 'bg-yellow-200 rounded-full p-1' : ''}
+                    className={`
+                    absolute text-base 
+                    ${ringColors[ringIndex % ringColors.length]}
+                    ${selectedSlots[ringIndex][i] ? 'border-2 border-white scale-100 p-0' : ''}
                     ${generatingRing === ringIndex ? 'animate-pulse' : ''}
+                    ${i % 6 === 0 ? 'text-xl' : ''}
+                    transition-all duration-200 ease-in-out
+                    rounded-full p-1
                 `}
                     style={{
                         left: `${x}px`,
                         top: `${y}px`,
-                        transform: `rotate(${angle + 90}deg)`,
+                        transform: `rotate(${angle + 90}deg)${selectedSlots[ringIndex][i] ? ' scale(1.0)' : ''}`,
                     }}
                     onClick={() => handleSlotSelect(ringIndex, i)}
                     disabled={generatingRing !== -1}
@@ -172,7 +187,7 @@ const PasswordGenerator = () => {
     };
 
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+        <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-800 p-4">
             <div className="mb-4">
                 <SettingsMenu onSettingsChange={setSettings}/>
             </div>
@@ -186,7 +201,7 @@ const PasswordGenerator = () => {
             >
                 Generate Password
             </button>
-            <div className="text-2xl font-bold mb-2">
+            <div className="text-2xl font-bold mb-2 text-cyan-100">
                 Password: {password.join('')}
             </div>
             <div className={`text-lg font-semibold mb-2 ${
