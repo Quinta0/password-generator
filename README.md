@@ -15,7 +15,6 @@ You can try out the Rotating Password Generator here: [Password Generator](https
     - Character types (uppercase, lowercase, numbers, symbols)
 - Real-time password strength indicator
 - Copy to clipboard functionality
-- Responsive design
 
 ## 🚀 How to Use
 
