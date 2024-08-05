@@ -3,8 +3,6 @@
 import { useState, useEffect } from 'react';
 import { SettingsMenu, PasswordSettings } from "@/components/SettingsMenu";
 import { CheckCircle2, Copy } from 'lucide-react';
-import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 const PasswordGenerator = () => {
@@ -19,94 +17,171 @@ const PasswordGenerator = () => {
 
     const [rings, setRings] = useState<string[][]>([]);
     const [selectedSlots, setSelectedSlots] = useState<boolean[][]>([]);
-    const [generatingRing, setGeneratingRing] = useState(-1);
-    const [password, setPassword] = useState<string[]>([]);
-
+    const [password, setPassword] = useState<string>('');
     const [passwordStrength, setPasswordStrength] = useState('');
     const [copied, setCopied] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [hoveredRing, setHoveredRing] = useState<number | null>(null);
 
     useEffect(() => {
         initializeRings();
     }, [settings]);
 
+
     const initializeRings = () => {
-        const newRings: string[][] = [];
-        const newSelectedSlots: boolean[][] = [];
-        const charsPerRing = Math.ceil(settings.length / settings.rings);
-
-        for (let i = 0; i < settings.rings; i++) {
-            newRings.push(Array(26).fill('A'));
-            newSelectedSlots.push(Array(26).fill(false));
-        }
-
+        const newRings = Array.from({ length: settings.rings }, () => generateRingCharacters());
+        const newSelectedSlots = Array.from({ length: settings.rings }, () => Array(26).fill(false));
         setRings(newRings);
         setSelectedSlots(newSelectedSlots);
-        setPassword(Array(settings.rings).fill(''));
     };
 
-    const handleSlotSelect = (ringIndex: number, slotIndex: number) => {
-        setSelectedSlots(prev => {
-            const newSlots = [...prev];
-            const ringSlots = [...newSlots[ringIndex]];
-            const charsPerRing = Math.ceil(settings.length / settings.rings);
-            if (ringSlots[slotIndex]) {
-                ringSlots[slotIndex] = false;
-            } else if (ringSlots.filter(Boolean).length < charsPerRing) {
-                ringSlots[slotIndex] = true;
-            }
-            newSlots[ringIndex] = ringSlots;
-            return newSlots;
-        });
-    };
-
-    const startGeneration = () => {
-        setGeneratingRing(0);
-        generateRing(0);
-    };
-
-    const generateRing = (ringIndex: number) => {
-        let intervalCount = 0;
-        const interval = setInterval(() => {
-            setRings(prev => {
-                const newRings = [...prev];
-                newRings[ringIndex] = newRings[ringIndex].map(() => generateRandomChar());
-                return newRings;
-            });
-
-            intervalCount++;
-            if (intervalCount >= 20) {
-                clearInterval(interval);
-
-                setRings(prevRings => {
-                    const finalRings = [...prevRings];
-                    setPassword(prevPassword => {
-                        const newPassword = [...prevPassword];
-                        const selectedIndices = selectedSlots[ringIndex]
-                            .map((selected, index) => selected ? index : -1)
-                            .filter(index => index !== -1);
-                        newPassword[ringIndex] = selectedIndices.map(index => finalRings[ringIndex][index]).join('');
-                        return newPassword;
-                    });
-                    return finalRings;
-                });
-
-                if (ringIndex < settings.rings - 1) {
-                    setGeneratingRing(ringIndex + 1);
-                    generateRing(ringIndex + 1);
-                } else {
-                    setGeneratingRing(-1);
-                }
-            }
-        }, 100);
-    };
-
-    const generateRandomChar = () => {
+    const generateRingCharacters = () => {
         let chars = '';
         if (settings.uppercase) chars += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
         if (settings.lowercase) chars += 'abcdefghijklmnopqrstuvwxyz';
         if (settings.numbers) chars += '0123456789';
         if (settings.symbols) chars += '!@#$%^&*()_+-=[]{}|;:,.<>?';
-        return chars[Math.floor(Math.random() * chars.length)];
+        return Array.from({ length: 26 }, () => generateSecureRandomChar(chars));
+    };
+
+    const generateSecureRandomChar = (chars: string) => {
+        const array = new Uint8Array(1);
+        crypto.getRandomValues(array);
+        return chars[array[0] % chars.length];
+    };
+
+    const generatePassword = async () => {
+        setIsGenerating(true);
+        const charsPerRing = Math.ceil(settings.length / settings.rings);
+        let newPassword = '';
+        const newSelectedSlots = rings.map(() => Array(26).fill(false));
+
+        for (let ringIndex = 0; ringIndex < rings.length; ringIndex++) {
+            // Rotate and update characters
+            for (let i = 0; i < 20; i++) {
+                const newRing = generateRingCharacters();
+                setRings(prev => {
+                    const newRings = [...prev];
+                    newRings[ringIndex] = newRing;
+                    return newRings;
+                });
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+
+            // Select characters for the password
+            const selectedIndices = selectRandomIndices(26, charsPerRing);
+            for (const index of selectedIndices) {
+                newSelectedSlots[ringIndex][index] = true;
+                setSelectedSlots([...newSelectedSlots]);
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+
+        // Generate the password from the final state of the rings and selected slots
+        setRings(currentRings => {
+            newPassword = currentRings.flatMap((ring, ringIndex) =>
+                ring.filter((_, index) => newSelectedSlots[ringIndex][index])
+            ).join('').slice(0, settings.length);
+
+            setPassword(newPassword);
+            setPasswordStrength(checkPasswordStrength(newPassword));
+            return currentRings;
+        });
+
+        setIsGenerating(false);
+    };
+
+    const selectRandomIndices = (length: number, count: number) => {
+        const array = new Uint8Array(length);
+        crypto.getRandomValues(array);
+        return Array.from(array)
+            .map((value, index) => ({ value, index }))
+            .sort((a, b) => a.value - b.value)
+            .slice(0, count)
+            .map(({ index }) => index);
+    };
+
+    const copyToClipboard = () => {
+        navigator.clipboard.writeText(password).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
+    };
+
+    const [rotation, setRotation] = useState(() => {
+        const initialRotation = {};
+        for (let i = 0; i < settings.rings; i++) {
+            // @ts-ignore
+            initialRotation[i] = 0;
+        }
+        return initialRotation;
+    });
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setRotation(prev => {
+                const newRotation = {...prev};
+                for (let i = 0; i < settings.rings; i++) {
+                    if (i === hoveredRing) {
+                        // Slower rotation for hovered ring
+                        // @ts-ignore
+                        newRotation[i] = (prev[i] || 0) + 0.5;
+                    } else {
+                        // Normal rotation for other rings
+                        // @ts-ignore
+                        newRotation[i] = (prev[i] || 0) + 1;
+                    }
+                    // @ts-ignore
+                    newRotation[i] %= 360;
+                }
+                return newRotation;
+            });
+        }, 50);
+        return () => clearInterval(interval);
+    }, [hoveredRing, settings.rings]);
+
+    const renderRing = (ringIndex: number, totalRings: number) => {
+        const ringColors = [
+            'text-blue-400', 'text-green-400', 'text-yellow-400',
+            'text-purple-400', 'text-pink-400', 'text-red-400'
+        ];
+
+        return (
+            <div
+                className="absolute inset-0"
+                onMouseEnter={() => setHoveredRing(ringIndex)}
+                onMouseLeave={() => setHoveredRing(null)}
+            >
+                {rings[ringIndex].map((char, i) => {
+                    // @ts-ignore
+                    const angle = ((i * 360) / rings[ringIndex].length + rotation[ringIndex]) % 360;
+                    const radians = angle * (Math.PI / 180);
+                    const radius = 50 - (ringIndex * (50 / totalRings));
+                    const x = Math.cos(radians) * radius + 50;
+                    const y = Math.sin(radians) * radius + 50;
+
+                    return (
+                        <div
+                            key={i}
+                            className={`
+                            absolute text-xs sm:text-sm md:text-base font-bold 
+                            ${ringColors[ringIndex % ringColors.length]}
+                            transition-all duration-200 ease-in-out
+                            rounded-full p-0.5 sm:p-1
+                            ${selectedSlots[ringIndex][i] ? 'border border-white scale-110' : ''}
+                        `}
+                            style={{
+                                left: `${x}%`,
+                                top: `${y}%`,
+                                transform: `translate(-50%, -50%) rotate(${angle + 90}deg)`,
+                            }}
+                        >
+                            {char}
+                        </div>
+                    );
+                })}
+            </div>
+        );
     };
 
     const checkPasswordStrength = (pass: string) => {
@@ -128,87 +203,26 @@ const PasswordGenerator = () => {
         return 'Strong';
     };
 
-    useEffect(() => {
-        setPasswordStrength(checkPasswordStrength(password.join('')));
-    }, [password]);
-
-    const copyToClipboard = () => {
-        navigator.clipboard.writeText(password.join('')).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        });
-    };
-
-    const renderRing = (ringIndex: number, totalRings: number) => {
-        const containerSize = 600;
-        const centerX = containerSize / 2;
-        const centerY = containerSize / 2;
-        const maxRadius = (containerSize / 2) - 20;
-        const ringSpacing = maxRadius / totalRings;
-        const radius = maxRadius - (ringIndex * ringSpacing);
-
-        return rings[ringIndex].map((char, i) => {
-            const angle = (i * 360) / rings[ringIndex].length;
-            const radians = angle * (Math.PI / 180);
-            const x = Math.cos(radians) * radius + centerX;
-            const y = Math.sin(radians) * radius + centerY;
-
-            // Define colors for each ring
-            const ringColors = [
-                'text-blue-400',
-                'text-green-400',
-                'text-yellow-400',
-                'text-purple-400',
-                'text-pink-400',
-                'text-red-400'
-            ];
-
-            return (
-                <button
-                    key={i}
-                    className={`
-                    absolute text-base 
-                    ${ringColors[ringIndex % ringColors.length]}
-                    ${selectedSlots[ringIndex][i] ? 'border-2 border-white scale-100 p-0' : ''}
-                    ${generatingRing === ringIndex ? 'animate-pulse' : ''}
-                    ${i % 6 === 0 ? 'text-xl' : ''}
-                    transition-all duration-200 ease-in-out
-                    rounded-full p-1
-                `}
-                    style={{
-                        left: `${x}px`,
-                        top: `${y}px`,
-                        transform: `rotate(${angle + 90}deg)${selectedSlots[ringIndex][i] ? ' scale(1.0)' : ''}`,
-                    }}
-                    onClick={() => handleSlotSelect(ringIndex, i)}
-                    disabled={generatingRing !== -1}
-                >
-                    {char}
-                </button>
-            );
-        });
-    };
-
     return (
-        <>
-            <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-800 p-4">
-                <div className="mb-4">
+        <div className="flex flex-col min-h-screen">
+            <main className="flex-grow flex flex-col items-center justify-center p-4">
+                <div className="w-full max-w-md mb-4 flex justify-center">
                     <SettingsMenu onSettingsChange={setSettings}/>
                 </div>
-                <div className="relative w-full max-w-[600px] aspect-square mb-6">
+                <div className="relative w-full max-w-[90vmin] aspect-square mb-6">
                     {rings.map((_, index) => renderRing(index, settings.rings))}
                 </div>
                 <button
-                    className="px-4 py-2 bg-blue-500 text-white rounded-md mb-4"
-                    onClick={startGeneration}
-                    disabled={generatingRing !== -1 || !selectedSlots.every(ring => ring.filter(Boolean).length === Math.ceil(settings.length / settings.rings))}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-md mb-4 text-sm sm:text-base"
+                    onClick={generatePassword}
+                    disabled={isGenerating}
                 >
-                    Generate Password
+                    {isGenerating ? 'Generating...' : 'Generate Password'}
                 </button>
-                <div className="text-2xl font-bold mb-2 text-cyan-100">
-                    Password: {password.join('')}
+                <div className="text-lg sm:text-xl md:text-2xl font-bold mb-2 text-cyan-100 text-center">
+                    Password: {password}
                 </div>
-                <div className={`text-lg font-semibold mb-2 ${
+                <div className={`text-base sm:text-lg font-semibold mb-2 ${
                     passwordStrength === 'Weak' ? 'text-red-500' :
                         passwordStrength === 'Moderate' ? 'text-yellow-500' :
                             'text-green-500'
@@ -216,19 +230,19 @@ const PasswordGenerator = () => {
                     Strength: {passwordStrength}
                 </div>
                 <button
-                    className="flex items-center px-4 py-2 bg-green-500 text-white rounded-md"
+                    className="flex items-center px-4 py-2 bg-green-500 text-white rounded-md text-sm sm:text-base"
                     onClick={copyToClipboard}
                 >
                     {copied ? <CheckCircle2 className="mr-2"/> : <Copy className="mr-2"/>}
                     {copied ? 'Copied!' : 'Copy to Clipboard'}
                 </button>
-            </div>
+            </main>
             <footer className="bg-zinc-800 text-muted-foreground py-6">
-                <div className="container mx-auto px-4 md:px-6 flex items-center justify-between">
-                    <p className="text-sm">&copy; 2024 Quintavalle Pietro. All rights reserved.</p>
+                <div className="container mx-auto px-4 md:px-6 flex flex-col sm:flex-row items-center justify-between">
+                    <p className="text-sm mb-4 sm:mb-0">&copy; 2024 Quintavalle Pietro. All rights reserved.</p>
                     <nav className="flex items-center gap-4">
                         <Dialog>
-                            <DialogTrigger>Licence</DialogTrigger>
+                            <DialogTrigger className="text-sm">Licence</DialogTrigger>
                             <DialogContent>
                                 <DialogHeader>
                                     <DialogTitle>MIT License</DialogTitle>
@@ -278,31 +292,9 @@ const PasswordGenerator = () => {
                     </nav>
                 </div>
             </footer>
-        </>
+        </div>
     );
 };
-
-function ArrowUpDownIcon(props: React.SVGProps<SVGSVGElement>) {
-    return (
-        <svg
-            {...props}
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        >
-            <path d="m21 16-4 4-4-4"/>
-            <path d="M17 20V4"/>
-            <path d="m3 8 4-4 4 4"/>
-            <path d="M7 4v16"/>
-        </svg>
-    );
-}
 
 function GitHubIcon(props: React.SVGProps<SVGSVGElement>) {
     return (
