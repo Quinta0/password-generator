@@ -47,7 +47,9 @@ We welcome contributions to the Rotating Password Generator! Here's how you can 
 ### Development Setup
 
 1. Clone the repository:
-
+```bash
+git clone https://github.com/Quinta0/password-generator.git
+```
 2. Navigate to the project directory:
 ```bash
 cd password-generator
